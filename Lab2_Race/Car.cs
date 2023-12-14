@@ -27,7 +27,7 @@ namespace lab2_Race
             MaxSpeed = 120;
             CurrentPosition = 0;
             _timeSinceMethod = DateTime.Now;
-            _raceTotalMeter = 5_000;
+            _raceTotalMeter = 10_000;
             _random = new();
             _stopwatch = new();
 
