@@ -4,99 +4,137 @@ namespace lab2_Race
 {
     public class Car
     {
-        public string Name { get; set; }
-        public double MaxSpeed { get; set; } = 120;
-        public bool EventActive { get; set; } = false;
 
-        private double _raceTotalMeter;
-        public double StartRacePosition;
-        private DateTime _timeSinceMethod;
-        private Random _random;
+        public string Name { get; }
+        public double MaxSpeed { get; set; }
+        public bool EventActive { get; private set; }
+        public double CurrentPosition { get; private set; }
+        public TimeSpan FinishTime { get; private set; }
+
+        private static readonly object _lock = new();
+        private static bool _winner;
         private int _eventDuration;
+        private readonly int _raceTotalMeter;
+        private DateTime _timeSinceMethod;
+
+        private readonly Random _random;
+        private readonly Stopwatch _stopwatch;
+
 
         public Car(string name)
         {
             Name = name;
-            _raceTotalMeter = 500;
-            StartRacePosition = 0;
+            MaxSpeed = 120;
+            CurrentPosition = 0;
             _timeSinceMethod = DateTime.Now;
-            _random = new Random();
+            _raceTotalMeter = 5_000;
+            _random = new();
+            _stopwatch = new();
+
         }
 
-        public async Task StartRace(CancellationToken cancellationToken)
+        public async Task StartRaceAsync()
         {
-            var stopWatch = new Stopwatch();
-            stopWatch.Start();
-
-            //hardcoded for now
-            while (StartRacePosition <= _raceTotalMeter)
+            try
             {
+                _stopwatch.Start();
 
-                if (cancellationToken.IsCancellationRequested)
+                while (CurrentPosition <= _raceTotalMeter)
                 {
-                    break;
+                    await Task.Delay(1000);
+
+                    double distance = (MaxSpeed / 3.6) * 1;
+                    CurrentPosition += distance;
+                    CheckForEvents();
+
+                    if (_eventDuration > 0)
+                    {
+                        EventActive = true;
+                        await Task.Delay(_eventDuration * 1000);
+                        _eventDuration = 0;
+                        EventActive = false;
+                    }
                 }
 
-                await Task.Delay(1000, cancellationToken);
-
-                double distance = (MaxSpeed / 3.6) * 1;
-                StartRacePosition += distance;
-
-                if (DateTime.Now - _timeSinceMethod >= TimeSpan.FromSeconds(30) || StartRacePosition < 50)
+                if (!_winner)
                 {
-                    _eventDuration = RandomThings();
-                    _timeSinceMethod = DateTime.Now;
+                    SetWinner();
                 }
 
-                if (_eventDuration > 0)
+
+                _stopwatch.Stop();
+                FinishTime = _stopwatch.Elapsed;
+
+
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"An error occurred: {e.Message}");
+            }
+        }
+
+        private void SetWinner()
+        {
+            lock (_lock)
+            {
+                if (!_winner)
                 {
-                    EventActive = true;
-                    Console.WriteLine($"Sleeping for {_eventDuration}");
-                    await Task.Delay(_eventDuration * 1000, cancellationToken);
-                    Console.WriteLine($"waking up {Name}, after {_eventDuration} sleep");
-                    _eventDuration = default;
-                    EventActive = false;
+                    _winner = true;
+                    Console.Out.WriteLine($"{Name} wins the race!");
+                    Console.WriteLine(
+                        "Now waiting for all the other cars to enter goal and then party..");
                 }
             }
-
-
-
-            stopWatch.Stop();
-            TimeSpan raceTime = stopWatch.Elapsed;
-
-            Console.WriteLine($"{Name} has won the race!");
-            Console.WriteLine($"{raceTime.Minutes}m, {raceTime.Seconds}s, {raceTime.Milliseconds}ms");
         }
 
-        private int RandomThings()
+        private void CheckForEvents()
         {
-            Console.WriteLine($"{Name}: Entering event");
+            if (DateTime.Now - _timeSinceMethod >= TimeSpan.FromSeconds(30) || CurrentPosition < 50)
+            {
+                _eventDuration = RandomEventDuration();
+                _timeSinceMethod = DateTime.Now;
+            }
+
+            if (_eventDuration > 0)
+            {
+                EventActive = true;
+                Console.WriteLine($"\n{Name} encountered an event: {_eventDuration} seconds");
+            }
+        }
+
+
+
+        private int RandomEventDuration()
+        {
+            const double NoGasProbability = 0.02;
+            const double FlatTireProbability = 0.04;
+            const double BirdPoopProbability = 0.1;
+            const double EngineFailureProbability = 0.2;
+
 
             var eventHappened = Odds();
-            if (eventHappened <= 0.02)
+            if (eventHappened <= NoGasProbability)
             {
-                Console.WriteLine($"{Name}: No gas left... Loser!");
+                Console.WriteLine($"{Name}: No gas left... Haha loser!");
                 return 30;
             }
 
-            if (eventHappened <= 0.04)
+            if (eventHappened <= FlatTireProbability)
             {
                 Console.WriteLine($"{Name}: Flat tire");
                 return 20;
             }
 
-            if (eventHappened <= 0.1)
+            if (eventHappened <= BirdPoopProbability)
             {
-                Console.WriteLine($"{Name}: Bird pop on the windshield");
+                Console.WriteLine($"{Name}: Bird poop on the windshield");
                 return 10;
             }
 
-            if (eventHappened <= 0.2)
+            if (eventHappened <= EngineFailureProbability)
             {
                 MaxSpeed--;
-                Console.WriteLine($"{Name}: Engine failure");
-
-                Console.WriteLine($"{Name} new max speed {MaxSpeed} after problem with engine");
+                Console.WriteLine($"{Name}: Engine failure... new max speed {MaxSpeed}");
                 return 0;
             }
 
@@ -105,4 +143,6 @@ namespace lab2_Race
 
         private double Odds() => _random.NextDouble();
     }
+
 }
+
